@@ -135,9 +135,11 @@ public class AutoEat extends Module {
      */
     @EventHandler(priority = EventPriority.LOW)
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null) return;
+        if (mc == null || mc.player == null || mc.world == null) return;
+        if (Modules.get() == null) return false;
+        if (Modules.get().get(AutoGap.class) == null) return false;
         // Don't eat if AutoGap is already eating
-        if (Modules.get().get(AutoGap.class).isEating()) return;
+        if (Modules.get().get(AutoGap.class).isEating()) return false;
 
         // case 1: Already eating
         if (eating) {
@@ -264,6 +266,7 @@ public class AutoEat extends Module {
 
     public boolean shouldEat() {
         if (mc.player == null) return false;
+        if (mc.player.getInventory() == null) return false;
         boolean healthLow = mc.player.getHealth() <= healthThreshold.get();
         boolean hungerLow = mc.player.getHungerManager().getFoodLevel() <= hungerThreshold.get();
         if (!thresholdMode.get().test(healthLow, hungerLow)) return false;
@@ -283,7 +286,9 @@ public class AutoEat extends Module {
      */
     private int findSlot() {
         // prefer offhand
-        Item offHandItem = mc.player.getOffHandStack().getItem();
+        Item offHandItem = mc.player.getOffHandStack() != null
+            ? mc.player.getOffHandStack().getItem()
+            : Items.AIR;
         FoodComponent offHandFood = offHandItem.getComponents().get(DataComponentTypes.FOOD);
         if (offHandFood != null && !blacklist.get().contains(offHandItem)) return SlotUtils.OFFHAND;
 
