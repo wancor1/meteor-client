@@ -200,6 +200,9 @@ public class ActiveModulesHud extends HudElement {
     @Override
     public void tick(HudRenderer renderer) {
         modules.clear();
+        if (mc.player == null || mc.world == null || mc.getNetworkHandler() == null) {
+            return;
+        }
 
         for (Module module : Modules.get().getActive()) {
             if (!hiddenModules.get().contains(module)) modules.add(module);
