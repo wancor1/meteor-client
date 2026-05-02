@@ -200,6 +200,7 @@ public class Utils {
     }
 
     public static int getRenderDistance() {
+        if (mc == null || mc.getNetworkHandler() == null) {return 0;}
         return Math.max(mc.options.getViewDistance().getValue(), ((ClientPlayNetworkHandlerAccessor) mc.getNetworkHandler()).meteor$getChunkLoadDistance());
     }
 
