@@ -31,6 +31,7 @@ import java.util.Comparator;
 import java.util.List;
 
 public class Scaffold extends Module {
+
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
     private final SettingGroup sgRender = settings.createGroup("Render");
 
@@ -49,24 +50,12 @@ public class Scaffold extends Module {
 
     private final Setting<Boolean> fastTower = sgGeneral.add(new BoolSetting.Builder()
         .name("fast-tower")
-        .description("Whether or not to scaffold upwards faster.")
         .defaultValue(false)
-        .build()
-    );
-
-    private final Setting<Double> towerSpeed = sgGeneral.add(new DoubleSetting.Builder()
-        .name("tower-speed")
-        .description("The speed at which to tower.")
-        .defaultValue(0.5)
-        .min(0)
-        .sliderMax(1)
-        .visible(fastTower::get)
         .build()
     );
 
     private final Setting<Boolean> whileMoving = sgGeneral.add(new BoolSetting.Builder()
         .name("while-moving")
-        .description("Allows you to tower while moving.")
         .defaultValue(false)
         .visible(fastTower::get)
         .build()
@@ -74,42 +63,36 @@ public class Scaffold extends Module {
 
     private final Setting<Boolean> onlyOnClick = sgGeneral.add(new BoolSetting.Builder()
         .name("only-on-click")
-        .description("Only places blocks when holding right click.")
         .defaultValue(false)
         .build()
     );
 
     private final Setting<Boolean> renderSwing = sgGeneral.add(new BoolSetting.Builder()
         .name("swing")
-        .description("Renders your client-side swing.")
         .defaultValue(false)
         .build()
     );
 
     private final Setting<Boolean> autoSwitch = sgGeneral.add(new BoolSetting.Builder()
         .name("auto-switch")
-        .description("Automatically swaps to a block before placing.")
         .defaultValue(true)
         .build()
     );
 
     private final Setting<Boolean> rotate = sgGeneral.add(new BoolSetting.Builder()
         .name("rotate")
-        .description("Rotates towards the blocks being placed.")
         .defaultValue(true)
         .build()
     );
 
     private final Setting<Boolean> airPlace = sgGeneral.add(new BoolSetting.Builder()
         .name("air-place")
-        .description("Allow air place. This also allows you to modify scaffold radius.")
         .defaultValue(false)
         .build()
     );
 
     private final Setting<Double> aheadDistance = sgGeneral.add(new DoubleSetting.Builder()
         .name("ahead-distance")
-        .description("How far ahead to place blocks.")
         .defaultValue(0)
         .min(0)
         .sliderMax(1)
@@ -119,7 +102,6 @@ public class Scaffold extends Module {
 
     private final Setting<Double> placeRange = sgGeneral.add(new DoubleSetting.Builder()
         .name("closest-block-range")
-        .description("How far can scaffold place blocks when you are in air.")
         .defaultValue(4)
         .min(0)
         .sliderMax(8)
@@ -129,7 +111,6 @@ public class Scaffold extends Module {
 
     private final Setting<Double> radius = sgGeneral.add(new DoubleSetting.Builder()
         .name("radius")
-        .description("Scaffold radius.")
         .defaultValue(0)
         .min(0)
         .max(6)
@@ -139,25 +120,20 @@ public class Scaffold extends Module {
 
     private final Setting<Integer> blocksPerTick = sgGeneral.add(new IntSetting.Builder()
         .name("blocks-per-tick")
-        .description("How many blocks to place in one tick.")
         .defaultValue(3)
         .min(1)
         .visible(airPlace::get)
         .build()
     );
 
-    // Render
-
     private final Setting<Boolean> render = sgRender.add(new BoolSetting.Builder()
         .name("render")
-        .description("Whether to render blocks that have been placed.")
         .defaultValue(true)
         .build()
     );
 
     private final Setting<ShapeMode> shapeMode = sgRender.add(new EnumSetting.Builder<ShapeMode>()
         .name("shape-mode")
-        .description("How the shapes are rendered.")
         .defaultValue(ShapeMode.Both)
         .visible(render::get)
         .build()
@@ -165,7 +141,6 @@ public class Scaffold extends Module {
 
     private final Setting<SettingColor> sideColor = sgRender.add(new ColorSetting.Builder()
         .name("side-color")
-        .description("The side color of the target block rendering.")
         .defaultValue(new SettingColor(197, 137, 232, 10))
         .visible(render::get)
         .build()
@@ -173,7 +148,6 @@ public class Scaffold extends Module {
 
     private final Setting<SettingColor> lineColor = sgRender.add(new ColorSetting.Builder()
         .name("line-color")
-        .description("The line color of the target block rendering.")
         .defaultValue(new SettingColor(197, 137, 232))
         .visible(render::get)
         .build()
@@ -181,139 +155,129 @@ public class Scaffold extends Module {
 
     private final BlockPos.Mutable bp = new BlockPos.Mutable();
 
+    private final List<BlockPos> queue = new ArrayList<>();
+
     public Scaffold() {
         super(Categories.Movement, "scaffold", "Automatically places blocks under you.");
     }
 
-
     @EventHandler
     private void onTick(TickEvent.Pre event) {
         if (onlyOnClick.get() && !mc.options.useKey.isPressed()) return;
+        if (mc.player == null || mc.world == null) return;
 
         Vec3d vec = mc.player.getEntityPos().add(mc.player.getVelocity()).add(0, -0.75, 0);
+
         if (airPlace.get()) {
             bp.set(vec.getX(), vec.getY(), vec.getZ());
         } else {
             Vec3d pos = mc.player.getEntityPos();
-            if (aheadDistance.get() != 0 && !towering() && !mc.world.getBlockState(mc.player.getBlockPos().down()).getCollisionShape(mc.world, mc.player.getBlockPos()).isEmpty()) {
+
+            if (aheadDistance.get() != 0 && !towering()) {
                 Vec3d dir = Vec3d.fromPolar(0, mc.player.getYaw()).multiply(aheadDistance.get(), 0, aheadDistance.get());
+
                 if (mc.options.forwardKey.isPressed()) pos = pos.add(dir.x, 0, dir.z);
                 if (mc.options.backKey.isPressed()) pos = pos.add(-dir.x, 0, -dir.z);
                 if (mc.options.leftKey.isPressed()) pos = pos.add(dir.z, 0, -dir.x);
                 if (mc.options.rightKey.isPressed()) pos = pos.add(-dir.z, 0, dir.x);
             }
+
             bp.set(pos.x, vec.y, pos.z);
         }
-        if (mc.options.sneakKey.isPressed() && !mc.options.jumpKey.isPressed() && mc.player.getY() + vec.y > -1) {
-            bp.setY(bp.getY() - 1);
-        }
-        if (bp.getY() >= mc.player.getBlockPos().getY()) {
-            bp.setY(mc.player.getBlockPos().getY() - 1);
-        }
+
         BlockPos targetBlock = bp.toImmutable();
-
-        if (!airPlace.get() && (BlockUtils.getPlaceSide(bp) == null)) {
-            Vec3d pos = mc.player.getEntityPos();
-            pos = pos.add(0, -0.98f, 0);
-            pos.add(mc.player.getVelocity());
-
-            List<BlockPos> blockPosArray = new ArrayList<>();
-            for (int x = (int) (mc.player.getX() - placeRange.get()); x < mc.player.getX() + placeRange.get(); x++) {
-                for (int z = (int) (mc.player.getZ() - placeRange.get()); z < mc.player.getZ() + placeRange.get(); z++) {
-                    for (int y = (int) Math.max(mc.world.getBottomY(), mc.player.getY() - placeRange.get()); y < Math.min(mc.world.getHeight(), mc.player.getY() + placeRange.get()); y++) {
-                        bp.set(x, y, z);
-                        if (BlockUtils.getPlaceSide(bp) == null) continue;
-                        if (!BlockUtils.canPlace(bp)) continue;
-                        if (mc.player.getEyePos().squaredDistanceTo(Vec3d.ofCenter(bp.offset(BlockUtils.getClosestPlaceSide(bp)))) > 36) continue;
-                        blockPosArray.add(new BlockPos(bp));
-                    }
-                }
-            }
-            if (blockPosArray.isEmpty()) return;
-
-            blockPosArray.sort(Comparator.comparingDouble((blockPos) -> blockPos.getSquaredDistance(targetBlock)));
-
-            bp.set(blockPosArray.getFirst());
-        }
 
         if (airPlace.get()) {
             List<BlockPos> blocks = new ArrayList<>();
-            for (int x = (int) (bp.getX() - radius.get()); x <= bp.getX() + radius.get(); x++) {
-                for (int z = (int) (bp.getZ() - radius.get()); z <= bp.getZ() + radius.get(); z++) {
+
+            for (int x = (int)(bp.getX() - radius.get()); x <= bp.getX() + radius.get(); x++) {
+                for (int z = (int)(bp.getZ() - radius.get()); z <= bp.getZ() + radius.get(); z++) {
                     BlockPos blockPos = BlockPos.ofFloored(x, bp.getY(), z);
-                    if (mc.player.getEntityPos().distanceTo(Vec3d.ofCenter(blockPos)) <= radius.get() || (x == bp.getX() && z == bp.getZ())) {
-                        blocks.add(blockPos);
-                    }
+                    blocks.add(blockPos);
                 }
             }
 
-            if (!blocks.isEmpty()) {
-                blocks.sort(Comparator.comparingDouble(PlayerUtils::squaredDistanceTo));
-                int counter = 0;
-                for (BlockPos block : blocks) {
-                    if (place(block)) {
-                        counter++;
-                    }
+            blocks.sort(Comparator.comparingDouble(PlayerUtils::squaredDistanceTo));
 
-                    if (counter >= blocksPerTick.get()) {
-                        break;
-                    }
-                }
+            int counter = 0;
+            for (BlockPos block : blocks) {
+                if (place(block)) counter++;
+                if (counter >= blocksPerTick.get()) break;
             }
+
         } else {
-            place(bp);
+            queue.add(bp.toImmutable());
         }
 
+        handleTower();
+    }
+
+    @EventHandler
+    private void onTickPost(TickEvent.Post event) {
+        if (mc.player == null || mc.world == null) return;
+
+        for (BlockPos pos : queue) {
+            place(pos);
+        }
+        queue.clear();
+    }
+
+    private void handleTower() {
+        if (!fastTower.get()) return;
+        if (!mc.options.jumpKey.isPressed()) return;
+        if (mc.options.sneakKey.isPressed()) return;
+
         FindItemResult result = InvUtils.findInHotbar(itemStack -> validItem(itemStack, bp));
-        if (fastTower.get() && mc.options.jumpKey.isPressed() && !mc.options.sneakKey.isPressed() && result.found() && (autoSwitch.get() || result.getHand() != null)) {
-            Vec3d velocity = mc.player.getVelocity();
-            Box playerBox = mc.player.getBoundingBox();
-            if (Streams.stream(mc.world.getBlockCollisions(mc.player, playerBox.offset(0, 1, 0))).toList().isEmpty()) {
-                // If there is no block above the player: move the player up, so he can place another block
-                if (whileMoving.get() || !PlayerUtils.isMoving()) {
-                    velocity = new Vec3d(velocity.x, towerSpeed.get(), velocity.z);
-                }
-                mc.player.setVelocity(velocity);
-            } else {
-                // If there is a block above the player: move the player down, so he's on top of the placed block
-                mc.player.setVelocity(velocity.x, Math.ceil(mc.player.getY()) - mc.player.getY(), velocity.z);
-                mc.player.setOnGround(true);
+        if (!result.found()) return;
+
+        Vec3d velocity = mc.player.getVelocity();
+        Box box = mc.player.getBoundingBox();
+
+        if (Streams.stream(mc.world.getBlockCollisions(mc.player, box.offset(0, 1, 0))).toList().isEmpty()) {
+            if (whileMoving.get() || !PlayerUtils.isMoving()) {
+                mc.player.setVelocity(velocity.x, 0.5, velocity.z);
             }
+        } else {
+            mc.player.setVelocity(velocity.x, Math.ceil(mc.player.getY()) - mc.player.getY(), velocity.z);
+            mc.player.setOnGround(true);
         }
     }
 
     public boolean scaffolding() {
-        return isActive() && (!onlyOnClick.get() || (onlyOnClick.get() && mc.options.useKey.isPressed()));
+        return isActive() && (!onlyOnClick.get() || mc.options.useKey.isPressed());
     }
 
     public boolean towering() {
-        FindItemResult result = InvUtils.findInHotbar(itemStack -> validItem(itemStack, bp));
-        return scaffolding() && fastTower.get() && mc.options.jumpKey.isPressed() && !mc.options.sneakKey.isPressed() &&
-            (whileMoving.get() || !PlayerUtils.isMoving()) && result.found() && (autoSwitch.get() || result.getHand() != null);
+        return scaffolding() && fastTower.get() && mc.options.jumpKey.isPressed();
     }
 
-    private boolean validItem(ItemStack itemStack, BlockPos pos) {
-        if (!(itemStack.getItem() instanceof BlockItem)) return false;
+    private boolean validItem(ItemStack stack, BlockPos pos) {
+        if (!(stack.getItem() instanceof BlockItem)) return false;
 
-        Block block = ((BlockItem) itemStack.getItem()).getBlock();
+        Block block = ((BlockItem) stack.getItem()).getBlock();
 
         if (blocksFilter.get() == ListMode.Blacklist && blocks.get().contains(block)) return false;
-        else if (blocksFilter.get() == ListMode.Whitelist && !blocks.get().contains(block)) return false;
+        if (blocksFilter.get() == ListMode.Whitelist && !blocks.get().contains(block)) return false;
 
-        if (!Block.isShapeFullCube(block.getDefaultState().getCollisionShape(mc.world, pos))) return false;
-        return !(block instanceof FallingBlock) || !FallingBlock.canFallThrough(mc.world.getBlockState(pos));
+        if (!(block instanceof FallingBlock)) return true;
+        return !FallingBlock.canFallThrough(mc.world.getBlockState(pos));
     }
 
-    private boolean place(BlockPos bp) {
-        FindItemResult item = InvUtils.findInHotbar(itemStack -> validItem(itemStack, bp));
+    private boolean place(BlockPos pos) {
+        FindItemResult item = InvUtils.findInHotbar(stack -> validItem(stack, pos));
         if (!item.found()) return false;
 
-        if (item.getHand() == null && !autoSwitch.get()) return false;
-
-        if (BlockUtils.place(bp, item, rotate.get(), 50, renderSwing.get(), true)) {
-            // Render block if was placed
-            if (render.get())
-                RenderUtils.renderTickingBlock(bp.toImmutable(), sideColor.get(), lineColor.get(), shapeMode.get(), 0, 8, true, false);
+        if (BlockUtils.place(pos, item, rotate.get(), 50, renderSwing.get(), true)) {
+            if (render.get()) {
+                RenderUtils.renderTickingBlock(
+                    pos,
+                    sideColor.get(),
+                    lineColor.get(),
+                    shapeMode.get(),
+                    0, 8,
+                    true, false
+                );
+            }
             return true;
         }
         return false;
